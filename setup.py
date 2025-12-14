@@ -21,5 +21,5 @@ setup(name='kids_phone',
       license='MIT',
       packages=find_packages(),
       install_requires=[],
-      python_requires='2.7.*'
+      python_requires='>=3.0'
       )

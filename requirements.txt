@@ -1,0 +1,2 @@
+./linphone-5.4.60-cp313-cp313-linux_aarch64.whl
+RPi.GPIO==0.7.1

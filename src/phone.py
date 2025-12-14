@@ -27,7 +27,7 @@ class Kids_Phone:
  
         # Configure the linphone core
         signal.signal(signal.SIGINT, self.signal_handler)
-        linphone.set_log_handler(self.log_handler)
+       # linphone.set_log_handler(self.log_handler)
         if "LINPHONE_CFG" in environ:
             linphone_cfg=environ.get("LINPHONE_CFG")
         else:
