@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 import linphone
 import logging
@@ -6,6 +6,7 @@ import signal
 import time
 from os import environ
 import re
+import sys
 
 import RPi.GPIO as GPIO
 
@@ -23,32 +24,33 @@ BLINK_MODES = {
 class Kids_Phone:
     def __init__(self):
         self.quit_flag = False
-        callbacks =  {'call_state_changed': self.call_state_changed}
+        self.core_listener = linphone.Factory.get().create_core_listener()
+        self.core_listener.on_call_state_changed = self.call_state_changed
+        exit
  
         # Configure the linphone core
         signal.signal(signal.SIGINT, self.signal_handler)
-       # linphone.set_log_handler(self.log_handler)
+        # linphone.set_log_handler(self.log_handler)
         if "LINPHONE_CFG" in environ:
-            linphone_cfg=environ.get("LINPHONE_CFG")
+            linphone_cfg = environ.get("LINPHONE_CFG")
         else:
-            linphone_cfg="/home/pi/.linphonerc"
-        self.core = linphone.Core.new(callbacks, linphone_cfg, None)
+            linphone_cfg = "/home/pi/.linphonerc"
+        self.core = linphone.Factory.get().create_core(None, None, None)
 
         if "DB_PATH" in environ:
             db_path = environ.get("DB_PATH")
         else:
             db_path = 'kids_phone_conf/db.kids_phone.sqlite'
-        logging.info("Opening db from {db_path}.".format(db_path=db_path))
+        logging.info(f"Opening db from {db_path}.")
         self.phonebook_db = sqlite3.connect(db_path, check_same_thread=False)
 
         self.core.video_capture_enabled = False
         self.core.video_display_enabled = False
         self.core.max_calls = 1
-        self.core.ringer_device='ALSA: bcm2835 ALSA'
-        self.core.capture_device='ALSA: C-Media USB Headphone Set'
-        self.core.playback_device='ALSA: C-Media USB Headphone Set'
-        #self.core.ringer_device='ALSA: default device'
-        self.core.ring='/usr/share/sounds/linphone/rings/oldphone.wav'
+        self.core.ringer_device = 'ALSA: bcm2835 ALSA'
+        self.core.capture_device = 'ALSA: C-Media USB Headphone Set'
+        self.core.playback_device = 'ALSA: C-Media USB Headphone Set'
+        self.core.ring = '/usr/share/sounds/linphone/rings/oldphone.wav'
 
         self.state = linphone.CallState.Idle
 
@@ -57,7 +59,6 @@ class Kids_Phone:
 
         # Setup cradle handler
         cradle.setup(self.cradle_up_handler, self.cradle_down_handler)
-
 
         fetap_keypad.setup(key_handler=self.call)
 
@@ -69,11 +70,11 @@ class Kids_Phone:
         self.quit_flag = True
         try:
             sys.stdout.close()
-        except:
+        except Exception:
             pass
         try:
             sys.stderr.close()
-        except:
+        except Exception:
             pass
 
         # Stop blinking
@@ -91,10 +92,9 @@ class Kids_Phone:
     def call_state_changed(self, core, call, state, message):
         self.state = state
         if state == linphone.CallState.IncomingReceived:
-        # if call.remote_address.as_string_uri_only() in self.whitelist:
-            logging.info("Anruf von {address}.".format(address=call.remote_address.as_string_uri_only()))
+            logging.info(f"Anruf von {call.remote_address.as_string_uri_only()}.")
             whitelist = [i[0] for i in self.phonebook_db.execute("select * from call_numbers_caller_number_allowed;").fetchall()]
-            logging.info("Anruf von {address}.".format(address=call.remote_address.as_string_uri_only()))
+            logging.info(f"Anruf von {call.remote_address.as_string_uri_only()}.")
             logging.info("Erlaubte Nummern: " + ", ".join(whitelist))
             if call.remote_address.username not in whitelist:
                 core.decline_call(call, linphone.Reason.Declined)
@@ -128,14 +128,14 @@ class Kids_Phone:
         if self.state in (linphone.CallState.Idle, linphone.CallState.Released, linphone.CallState.End):
             # Check if phonenumber is set for current key
             phonenumber = self.phonebook(number)
-            if phonenumber != None:
+            if phonenumber is not None:
                 params = self.core.create_call_params(self.core.current_call)
                 params.early_media_sending_enabled = False
                 self.core.invite_with_params(phonenumber, params)
     
     def phonebook(self, number):
         number = self.phonebook_db.execute(
-            'select phonenumber from call_numbers_key_and_number where key=?', str(number)).fetchone()[0]
+            'select phonenumber from call_numbers_key_and_number where key=?', (str(number),)).fetchone()[0]
         return str(number)
     
     def register(self, username, password, realm):
@@ -145,9 +145,8 @@ class Kids_Phone:
 
         # Create new proxy settings
         proxy_cfg = self.core.create_proxy_config()
-        proxy_cfg.identity_address = self.core.create_address('sip:{username}@{realm}'.format(username=username, realm=realm))
-        #proxy_cfg.server_addr = 'sip:{realm};transport=tls'.format(realm=realm)
-        proxy_cfg.server_addr = 'sip:{realm}'.format(realm=realm)
+        proxy_cfg.identity_address = self.core.create_address(f'sip:{username}@{realm}')
+        proxy_cfg.server_addr = f'sip:{realm}'
         proxy_cfg.register_enabled = True
         proxy_cfg.avpf_mode = 1
         proxy_cfg.publish_enabled = True
@@ -160,7 +159,7 @@ class Kids_Phone:
 
     def get_registration(self):
         logging.info("Auth info has been requested")
-        if len(self.core.auth_info_list)>0:
+        if len(self.core.auth_info_list) > 0:
             registration = {}
             auth_info = self.core.auth_info_list[0]
             registration["username"] = auth_info.username
